@@ -3,6 +3,7 @@ import re
 import zipfile
 import io
 import base64
+import time
 import streamlit as st
 from pypdf import PdfReader, PdfWriter
 from pdf2image import convert_from_path
@@ -28,7 +29,7 @@ def pil_a_base64(imagen_pil):
     return base64.b64encode(buffered.getvalue()).decode('utf-8')
 
 def extraer_multiples_campos(imagen_pil):
-    """Envía la imagen a GPT-4o-mini para leer la caligrafía."""
+    """Envía la imagen a GPT-4o-mini con control de reintentos si se alcanza el límite de velocidad."""
     
     prompt = (
         f"Analiza este documento y busca los campos '{CAMPO_FIJO_1}' y '{CAMPO_FIJO_2}', "
@@ -38,39 +39,51 @@ def extraer_multiples_campos(imagen_pil):
         f"No escribas NADA MÁS. Si algún dato es ilegible o falta, usa la sigla ND."
     )
     
-    try:
-        base64_image = pil_a_base64(imagen_pil)
-        
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
-                            "type": "image_url"
-                        }
-                    ]
-                }
-            ],
-            max_tokens=30,
-            temperature=0.1
-        )
-        
-        texto = response.choices[0].message.content.strip()
-
-        nombre_valido = re.sub(r'[\\/*?:"<>|.\n\r]', '', texto)
-        
-        # Limpiamos guiones bajos duplicados y espacios sobrantes
-        nombre_limpio = re.sub(r'_+', '_', nombre_valido).strip('_')
-        
-        return nombre_limpio if nombre_limpio else "sin_datos"
-        
-    except Exception as e:
-        st.error(f"Error de conexión con OpenAI: {e}")
-        return "error_IA"
+    max_reintentos = 3
+    for intento in range(max_reintentos):
+        try:
+            base64_image = pil_a_base64(imagen_pil)
+            
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                                "type": "image_url"
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=30,
+                temperature=0.1
+            )
+            
+            texto = response.choices[0].message.content.strip()
+            
+            # Limpiamos puntos, barras y caracteres prohibidos
+            nombre_valido = re.sub(r'[\\/*?:"<>|.\n\r]', '_', texto)
+            nombre_limpio = re.sub(r'_+', '_', nombre_valido).strip('_')
+            
+            return nombre_limpio if nombre_limpio else "sin_datos"
+            
+        except Exception as e:
+            mensaje_error = str(e)
+            
+            # Si el error es por límite de velocidad (Rate limit / 429)
+            if "429" in mensaje_error or "rate_limit_exceeded" in mensaje_error:
+                tiempo_espera = (intento + 1) * 3  # Espera progresiva: 3s, luego 6s, luego 9s
+                time.sleep(tiempo_espera)
+            else:
+                # Si es otro error diferente, lo mostramos
+                st.error(f"Error de conexión con OpenAI: {e}")
+                return "error_IA"
+                
+    # Si se agotan los reintentos
+    return "error_IA"
 
 def crear_zip_desde_pdf(archivo_subido):
     ruta_temporal = "temp_upload.pdf"
