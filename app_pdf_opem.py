@@ -39,10 +39,8 @@ def extraer_multiples_campos(imagen_pil):
     )
     
     try:
-        # Convertimos la imagen
         base64_image = pil_a_base64(imagen_pil)
         
-        # Hacemos la consulta a la IA
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -51,23 +49,26 @@ def extraer_multiples_campos(imagen_pil):
                     "content": [
                         {"type": "text", "text": prompt},
                         {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}
+                            "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"},
+                            "type": "image_url"
                         }
                     ]
                 }
             ],
-            max_tokens=30, # Limitamos la respuesta para gastar menos saldo
-            temperature=0.1 # Nivel de "creatividad" bajo, queremos respuestas exactas
+            max_tokens=30,
+            temperature=0.1
         )
         
-        # Limpiamos el texto devuelto
         texto = response.choices[0].message.content.strip()
-        nombre_valido = re.sub(r'[\\/*?:"<>|\n\r]', '_', texto)
-        return re.sub(r'_+', '_', nombre_valido).strip('_')
+
+        nombre_valido = re.sub(r'[\\/*?:"<>|.\n\r]', '_', texto)
+        
+        # Limpiamos guiones bajos duplicados y espacios sobrantes
+        nombre_limpio = re.sub(r'_+', '_', nombre_valido).strip('_')
+        
+        return nombre_limpio if nombre_limpio else "sin_datos"
         
     except Exception as e:
-        # Si falla (ej. sin internet), muestra el error en la web
         st.error(f"Error de conexión con OpenAI: {e}")
         return "error_IA"
 
