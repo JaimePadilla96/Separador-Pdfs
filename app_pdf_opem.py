@@ -61,7 +61,7 @@ def extraer_multiples_campos(imagen_pil):
         
         texto = response.choices[0].message.content.strip()
 
-        nombre_valido = re.sub(r'[\\/*?:"<>|.\n\r]', '_', texto)
+        nombre_valido = re.sub(r'[\\/*?:"<>|.\n\r]', '', texto)
         
         # Limpiamos guiones bajos duplicados y espacios sobrantes
         nombre_limpio = re.sub(r'_+', '_', nombre_valido).strip('_')
