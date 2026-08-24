@@ -1,5 +1,0 @@
-streamlit
-openai
-pypdf
-pdf2image
-pillow
